@@ -19,10 +19,11 @@
 
 #include <dmlc/logging.h>
 #include <gtest/gtest.h>
-#include <tvm/operation.h>
+#include <tvm/te/operation.h>
 
 TEST(Expr, Basic) {
   using namespace tvm;
+  using namespace tvm::tir;
   Var x("x");
   auto z = max(x + 1 + 2, 100);
   ObjectRef tmp = z;
@@ -33,17 +34,16 @@ TEST(Expr, Basic) {
   CHECK(os.str() == "max(((x + 1) + 2), 100)");
 }
 
-
 TEST(ExprNodeRef, Basic) {
   using namespace tvm;
+  using namespace tvm::tir;
   Var x("x");
   PrimExpr z = max(x + 1 + 2, 100);
-  const ir::MaxNode* op = z.as<ir::MaxNode>();
+  const tir::MaxNode* op = z.as<tir::MaxNode>();
   CHECK(GetRef<ObjectRef>(op).same_as(z));
 }
 
-
-int main(int argc, char ** argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   testing::FLAGS_gtest_death_test_style = "threadsafe";
   return RUN_ALL_TESTS();

@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 import tvm
+from tvm import te
 import numpy as np
 from tvm.contrib import cublas
 from tvm.contrib import cublaslt
@@ -23,13 +24,13 @@ def verify_matmul_add(in_dtype, out_dtype, rtol=1e-5):
     n = 1024
     l = 128
     m = 236
-    A = tvm.placeholder((n, l), name='A', dtype=in_dtype)
-    B = tvm.placeholder((l, m), name='B', dtype=in_dtype)
+    A = te.placeholder((n, l), name='A', dtype=in_dtype)
+    B = te.placeholder((l, m), name='B', dtype=in_dtype)
     C = cublas.matmul(A, B, dtype=out_dtype)
-    s = tvm.create_schedule(C.op)
+    s = te.create_schedule(C.op)
 
     def verify(target="cuda"):
-        if not tvm.module.enabled(target):
+        if not tvm.runtime.enabled(target):
             print("skip because %s is not enabled..." % target)
             return
         if not tvm.get_global_func("tvm.contrib.cublas.matmul", True):
@@ -56,14 +57,14 @@ def verify_matmul_add_igemm(in_dtype, out_dtype, rtol=1e-5):
     N = roundoff(n, 8)
     N_out = roundoff(n, 32)
 
-    A = tvm.placeholder((N, L), name='A', dtype=in_dtype)
-    B = tvm.placeholder((m, L), name='B', dtype=in_dtype)
+    A = te.placeholder((N, L), name='A', dtype=in_dtype)
+    B = te.placeholder((m, L), name='B', dtype=in_dtype)
     # C has CUBLASLT_ORDER_COL32 layout, thus a different shape
     C = cublaslt.matmul(A, B, False, True, m, N_out, dtype=out_dtype)
-    s = tvm.create_schedule(C.op)
+    s = te.create_schedule(C.op)
 
     def verify(target="cuda"):
-        if not tvm.module.enabled(target):
+        if not tvm.runtime.enabled(target):
             print("skip because %s is not enabled..." % target)
             return
         if not tvm.get_global_func("tvm.contrib.cublaslt.matmul", True):
@@ -108,13 +109,13 @@ def verify_batch_matmul(in_dtype, out_dtype, rtol=1e-5):
     n = 1024
     l = 128
     m = 236
-    A = tvm.placeholder((j, n, l), name='A', dtype=in_dtype)
-    B = tvm.placeholder((j, l, m), name='B', dtype=in_dtype)
+    A = te.placeholder((j, n, l), name='A', dtype=in_dtype)
+    B = te.placeholder((j, l, m), name='B', dtype=in_dtype)
     C = cublas.batch_matmul(A, B, dtype=out_dtype)
-    s = tvm.create_schedule(C.op)
+    s = te.create_schedule(C.op)
 
     def verify(target="cuda"):
-        if not tvm.module.enabled(target):
+        if not tvm.runtime.enabled(target):
             print("skip because %s is not enabled..." % target)
             return
         if not tvm.get_global_func("tvm.contrib.cublas.matmul", True):

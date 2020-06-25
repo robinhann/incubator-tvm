@@ -18,13 +18,11 @@
  */
 
 /*!
- * \file src/tvm/ir/type.cc
+ * \file src/ir/type.cc
  * \brief Common type system AST nodes throughout the IR.
  */
 #include <tvm/ir/type.h>
 #include <tvm/runtime/registry.h>
-#include <tvm/packed_func_ext.h>
-
 namespace tvm {
 
 PrimType::PrimType(runtime::DataType dtype) {
@@ -35,19 +33,36 @@ PrimType::PrimType(runtime::DataType dtype) {
 
 TVM_REGISTER_NODE_TYPE(PrimTypeNode);
 
-TVM_REGISTER_GLOBAL("relay._make.PrimType")
-.set_body_typed([](runtime::DataType dtype) {
+TVM_REGISTER_GLOBAL("ir.PrimType").set_body_typed([](runtime::DataType dtype) {
   return PrimType(dtype);
 });
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<PrimTypeNode>([](const ObjectRef& ref, NodePrinter* p) {
-    auto* node = static_cast<const PrimTypeNode*>(ref.get());
-    p->stream << node->dtype;
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<PrimTypeNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const PrimTypeNode*>(ref.get());
+      p->stream << node->dtype;
+    });
+
+PointerType::PointerType(Type element_type) {
+  ObjectPtr<PointerTypeNode> n = make_object<PointerTypeNode>();
+  n->element_type = std::move(element_type);
+  data_ = std::move(n);
+}
+
+TVM_REGISTER_NODE_TYPE(PointerTypeNode);
+
+TVM_REGISTER_GLOBAL("ir.PointerType").set_body_typed([](Type element_type) {
+  return PointerType(element_type);
 });
 
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<PointerTypeNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const PointerTypeNode*>(ref.get());
+      p->Print(node->element_type);
+      p->stream << '*';
+    });
 
-TypeVar::TypeVar(std::string name, TypeKind kind) {
+TypeVar::TypeVar(String name, TypeKind kind) {
   ObjectPtr<TypeVarNode> n = make_object<TypeVarNode>();
   n->name_hint = std::move(name);
   n->kind = std::move(kind);
@@ -56,20 +71,17 @@ TypeVar::TypeVar(std::string name, TypeKind kind) {
 
 TVM_REGISTER_NODE_TYPE(TypeVarNode);
 
-TVM_REGISTER_GLOBAL("relay._make.TypeVar")
-.set_body_typed([](std::string name, int kind) {
+TVM_REGISTER_GLOBAL("ir.TypeVar").set_body_typed([](String name, int kind) {
   return TypeVar(name, static_cast<TypeKind>(kind));
 });
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<TypeVarNode>([](const ObjectRef& ref, NodePrinter* p) {
-    auto* node = static_cast<const TypeVarNode*>(ref.get());
-    p->stream << "TypeVar(" << node->name_hint << ", "
-              << node->kind << ")";
-});
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<TypeVarNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const TypeVarNode*>(ref.get());
+      p->stream << "TypeVar(" << node->name_hint << ", " << node->kind << ")";
+    });
 
-
-GlobalTypeVar::GlobalTypeVar(std::string name, TypeKind kind) {
+GlobalTypeVar::GlobalTypeVar(String name, TypeKind kind) {
   ObjectPtr<GlobalTypeVarNode> n = make_object<GlobalTypeVarNode>();
   n->name_hint = std::move(name);
   n->kind = std::move(kind);
@@ -78,21 +90,17 @@ GlobalTypeVar::GlobalTypeVar(std::string name, TypeKind kind) {
 
 TVM_REGISTER_NODE_TYPE(GlobalTypeVarNode);
 
-TVM_REGISTER_GLOBAL("relay._make.GlobalTypeVar")
-.set_body_typed([](std::string name, int kind) {
+TVM_REGISTER_GLOBAL("ir.GlobalTypeVar").set_body_typed([](String name, int kind) {
   return GlobalTypeVar(name, static_cast<TypeKind>(kind));
 });
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<GlobalTypeVarNode>([](const ObjectRef& ref, NodePrinter* p) {
-    auto* node = static_cast<const GlobalTypeVarNode*>(ref.get());
-    p->stream << "GlobalTypeVar(" << node->name_hint << ", "
-              << node->kind << ")";
-});
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<GlobalTypeVarNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const GlobalTypeVarNode*>(ref.get());
+      p->stream << "GlobalTypeVar(" << node->name_hint << ", " << node->kind << ")";
+    });
 
-FuncType::FuncType(tvm::Array<Type> arg_types,
-                   Type ret_type,
-                   tvm::Array<TypeVar> type_params,
+FuncType::FuncType(tvm::Array<Type> arg_types, Type ret_type, tvm::Array<TypeVar> type_params,
                    tvm::Array<TypeConstraint> type_constraints) {
   ObjectPtr<FuncTypeNode> n = make_object<FuncTypeNode>();
   n->arg_types = std::move(arg_types);
@@ -104,21 +112,18 @@ FuncType::FuncType(tvm::Array<Type> arg_types,
 
 TVM_REGISTER_NODE_TYPE(FuncTypeNode);
 
-TVM_REGISTER_GLOBAL("relay._make.FuncType")
-.set_body_typed([](tvm::Array<Type> arg_types,
-                   Type ret_type,
-                   tvm::Array<TypeVar> type_params,
-                   tvm::Array<TypeConstraint> type_constraints) {
-  return FuncType(arg_types, ret_type, type_params, type_constraints);
-});
+TVM_REGISTER_GLOBAL("ir.FuncType")
+    .set_body_typed([](tvm::Array<Type> arg_types, Type ret_type, tvm::Array<TypeVar> type_params,
+                       tvm::Array<TypeConstraint> type_constraints) {
+      return FuncType(arg_types, ret_type, type_params, type_constraints);
+    });
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<FuncTypeNode>([](const ObjectRef& ref, NodePrinter* p) {
-  auto* node = static_cast<const FuncTypeNode*>(ref.get());
-  p->stream << "FuncType(" << node->type_params << ", "
-            << node->arg_types << ", " << node->ret_type << ", "
-            << node->type_constraints << ")";
-});
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<FuncTypeNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const FuncTypeNode*>(ref.get());
+      p->stream << "FuncType(" << node->type_params << ", " << node->arg_types << ", "
+                << node->ret_type << ", " << node->type_constraints << ")";
+    });
 
 TupleType::TupleType(Array<Type> fields) {
   ObjectPtr<TupleTypeNode> n = make_object<TupleTypeNode>();
@@ -126,21 +131,54 @@ TupleType::TupleType(Array<Type> fields) {
   data_ = std::move(n);
 }
 
-TupleType TupleType::Empty() {
-  return TupleType(Array<Type>());
-}
+TupleType TupleType::Empty() { return TupleType(Array<Type>()); }
 
 TVM_REGISTER_NODE_TYPE(TupleTypeNode);
 
-TVM_REGISTER_GLOBAL("relay._make.TupleType")
-.set_body_typed([](Array<Type> fields) {
+TVM_REGISTER_GLOBAL("ir.TupleType").set_body_typed([](Array<Type> fields) {
   return TupleType(fields);
 });
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<TupleTypeNode>([](const ObjectRef& ref, NodePrinter* p) {
-  auto* node = static_cast<const TupleTypeNode*>(ref.get());
-  p->stream << "TupleTypeNode(" << node->fields << ")";
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<TupleTypeNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const TupleTypeNode*>(ref.get());
+      p->stream << "TupleTypeNode(" << node->fields << ")";
+    });
+
+IncompleteType::IncompleteType(TypeKind kind) {
+  auto n = make_object<IncompleteTypeNode>();
+  n->kind = std::move(kind);
+  data_ = std::move(n);
+}
+
+TVM_REGISTER_NODE_TYPE(IncompleteTypeNode);
+
+TVM_REGISTER_GLOBAL("ir.IncompleteType").set_body_typed([](int kind) {
+  return IncompleteType(static_cast<TypeKind>(kind));
 });
+
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<IncompleteTypeNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const IncompleteTypeNode*>(ref.get());
+      p->stream << "IncompleteTypeNode(" << node->kind << ", " << node << ")";
+    });
+
+RelayRefType::RelayRefType(Type value) {
+  ObjectPtr<RelayRefTypeNode> n = make_object<RelayRefTypeNode>();
+  n->value = std::move(value);
+  data_ = std::move(n);
+}
+
+TVM_REGISTER_GLOBAL("ir.RelayRefType").set_body_typed([](Type value) {
+  return RelayRefType(value);
+});
+
+TVM_REGISTER_NODE_TYPE(RelayRefTypeNode);
+
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<RelayRefTypeNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const RelayRefTypeNode*>(ref.get());
+      p->stream << "RelayRefTypeNode(" << node->value << ")";
+    });
 
 }  // namespace tvm

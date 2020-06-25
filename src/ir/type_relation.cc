@@ -18,14 +18,12 @@
  */
 
 /*!
- * \file src/tvm/ir/type_relation.cc
+ * \file src/ir/type_relation.cc
  * \brief Type relation
  */
 #include <tvm/ir/type.h>
 #include <tvm/ir/type_relation.h>
 #include <tvm/runtime/registry.h>
-#include <tvm/packed_func_ext.h>
-
 namespace tvm {
 
 TypeCall::TypeCall(Type func, tvm::Array<Type> args) {
@@ -37,22 +35,17 @@ TypeCall::TypeCall(Type func, tvm::Array<Type> args) {
 
 TVM_REGISTER_NODE_TYPE(TypeCallNode);
 
-TVM_REGISTER_GLOBAL("relay._make.TypeCall")
-.set_body_typed([](Type func, Array<Type> type) {
+TVM_REGISTER_GLOBAL("ir.TypeCall").set_body_typed([](Type func, Array<Type> type) {
   return TypeCall(func, type);
 });
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<TypeCallNode>([](const ObjectRef& ref, NodePrinter* p) {
-    auto* node = static_cast<const TypeCallNode*>(ref.get());
-  p->stream << "TypeCallNode(" << node->func << ", "
-            << node->args << ")";
-});
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<TypeCallNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const TypeCallNode*>(ref.get());
+      p->stream << "TypeCallNode(" << node->func << ", " << node->args << ")";
+    });
 
-TypeRelation::TypeRelation(TypeRelationFn func,
-                           Array<Type> args,
-                           int num_inputs,
-                           Attrs attrs) {
+TypeRelation::TypeRelation(TypeRelationFn func, Array<Type> args, int num_inputs, Attrs attrs) {
   ObjectPtr<TypeRelationNode> n = make_object<TypeRelationNode>();
   n->func = std::move(func);
   n->args = std::move(args);
@@ -63,19 +56,14 @@ TypeRelation::TypeRelation(TypeRelationFn func,
 
 TVM_REGISTER_NODE_TYPE(TypeRelationNode);
 
-TVM_REGISTER_GLOBAL("relay._make.TypeRelation")
-.set_body_typed([](TypeRelationFn func,
-                   Array<Type> args,
-                   int num_inputs,
-                   Attrs attrs) {
-  return TypeRelation(func, args, num_inputs, attrs);
-});
+TVM_REGISTER_GLOBAL("ir.TypeRelation")
+    .set_body_typed([](TypeRelationFn func, Array<Type> args, int num_inputs, Attrs attrs) {
+      return TypeRelation(func, args, num_inputs, attrs);
+    });
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<TypeRelationNode>([](const ObjectRef& ref, NodePrinter* p) {
-    auto* node = static_cast<const TypeRelationNode*>(ref.get());
-    p->stream << "TypeRelationNode("
-              << node->func->name
-              << ", " << node->args << ")";
-});
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<TypeRelationNode>([](const ObjectRef& ref, ReprPrinter* p) {
+      auto* node = static_cast<const TypeRelationNode*>(ref.get());
+      p->stream << "TypeRelationNode(" << node->func->name << ", " << node->args << ")";
+    });
 }  // namespace tvm

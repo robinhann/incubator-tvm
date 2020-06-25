@@ -16,11 +16,9 @@
 # under the License.
 # pylint: disable=invalid-name
 """Runtime Object api"""
-from __future__ import absolute_import
-
 import ctypes
 from ..base import _LIB, check_call
-from .types import TypeCode, RETURN_SWITCH, C_TO_PY_ARG_SWITCH, _wrap_arg_func
+from .types import ArgTypeCode, RETURN_SWITCH, C_TO_PY_ARG_SWITCH, _wrap_arg_func
 from .ndarray import _register_ndarray, NDArrayBase
 
 
@@ -52,15 +50,49 @@ def _return_object(x):
     tindex = ctypes.c_uint()
     check_call(_LIB.TVMObjectGetTypeIndex(handle, ctypes.byref(tindex)))
     cls = OBJECT_TYPE.get(tindex.value, _CLASS_OBJECT)
+    if issubclass(cls, PyNativeObject):
+        obj = _CLASS_OBJECT.__new__(_CLASS_OBJECT)
+        obj.handle = handle
+        return cls.__from_tvm_object__(cls, obj)
     # Avoid calling __init__ of cls, instead directly call __new__
     # This allows child class to implement their own __init__
     obj = cls.__new__(cls)
     obj.handle = handle
     return obj
 
-RETURN_SWITCH[TypeCode.OBJECT_HANDLE] = _return_object
-C_TO_PY_ARG_SWITCH[TypeCode.OBJECT_HANDLE] = _wrap_arg_func(
-    _return_object, TypeCode.OBJECT_HANDLE)
+RETURN_SWITCH[ArgTypeCode.OBJECT_HANDLE] = _return_object
+C_TO_PY_ARG_SWITCH[ArgTypeCode.OBJECT_HANDLE] = _wrap_arg_func(
+    _return_object, ArgTypeCode.OBJECT_HANDLE)
+
+C_TO_PY_ARG_SWITCH[ArgTypeCode.OBJECT_RVALUE_REF_ARG] = _wrap_arg_func(
+    _return_object, ArgTypeCode.OBJECT_RVALUE_REF_ARG)
+
+
+class PyNativeObject:
+    """Base class of all TVM objects that also subclass python's builtin types."""
+    __slots__ = []
+
+    def __init_tvm_object_by_constructor__(self, fconstructor, *args):
+        """Initialize the internal tvm_object by calling constructor function.
+
+        Parameters
+        ----------
+        fconstructor : Function
+            Constructor function.
+
+        args: list of objects
+            The arguments to the constructor
+
+        Note
+        ----
+        We have a special calling convention to call constructor functions.
+        So the return object is directly set into the object
+        """
+        # pylint: disable=assigning-non-slot
+        obj = _CLASS_OBJECT.__new__(_CLASS_OBJECT)
+        obj.__init_handle_by_constructor__(fconstructor, *args)
+        self.__tvm_object__ = obj
+
 
 
 class ObjectBase(object):
@@ -89,8 +121,28 @@ class ObjectBase(object):
         instead of creating a new Node.
         """
         # assign handle first to avoid error raising
+        # pylint: disable=not-callable
         self.handle = None
         handle = __init_by_constructor__(fconstructor, args)
         if not isinstance(handle, ObjectHandle):
             handle = ObjectHandle(handle)
         self.handle = handle
+
+    def same_as(self, other):
+        """Check object identity.
+
+        Parameters
+        ----------
+        other : object
+            The other object to compare against.
+
+        Returns
+        -------
+        result : bool
+             The comparison result.
+        """
+        if not isinstance(other, ObjectBase):
+            return False
+        if self.handle is None:
+            return other.handle is None
+        return self.handle.value == other.handle.value

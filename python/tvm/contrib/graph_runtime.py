@@ -16,28 +16,33 @@
 # under the License.
 """Minimum graph runtime that executes graph containing TVM PackedFunc."""
 import numpy as np
+import tvm._ffi
 
-from .._ffi.base import string_types
-from .._ffi.function import get_global_func
-from .._ffi.runtime_ctypes import TVMContext
-from ..rpc import base as rpc_base
+from tvm.rpc import _ffi_api as _rpc_ffi_api
+from tvm.rpc import base as rpc_base
+from tvm._ffi.base import string_types
+from tvm._ffi.runtime_ctypes import TVMContext
 
 
 def create(graph_json_str, libmod, ctx):
     """Create a runtime executor module given a graph and module.
+
     Parameters
     ----------
     graph_json_str : str or graph class
         The graph to be deployed in json format output by json graph.
         The graph can only contain one operator(tvm_op) that
         points to the name of PackedFunc in the libmod.
-    libmod : tvm.Module
+
+    libmod : tvm.runtime.Module
         The module of the corresponding function
+
     ctx : TVMContext or list of TVMContext
         The context to deploy the module. It can be local or remote when there
         is only one TVMContext. Otherwise, the first context in the list will
         be used as this purpose. All context should be given for heterogeneous
         execution.
+
     Returns
     -------
     graph_module : GraphModule
@@ -54,18 +59,21 @@ def create(graph_json_str, libmod, ctx):
     if num_rpc_ctx == len(ctx):
         fcreate = ctx[0]._rpc_sess.get_function("tvm.graph_runtime.create")
     else:
-        fcreate = get_global_func("tvm.graph_runtime.create")
+        fcreate = tvm._ffi.get_global_func("tvm.graph_runtime.create")
 
     return GraphModule(fcreate(graph_json_str, libmod, *device_type_id))
 
 
 def get_device_ctx(libmod, ctx):
     """Parse and validate all the device context(s).
+
     Parameters
     ----------
-    libmod : tvm.Module
+    libmod : tvm.runtime.Module
         The module of the corresponding function
+
     ctx : TVMContext or list of TVMContext
+
     Returns
     -------
     ctx : list of TVMContext
@@ -92,7 +100,7 @@ def get_device_ctx(libmod, ctx):
         device_type = cur_ctx.device_type
         if device_type >= rpc_base.RPC_SESS_MASK:
             assert libmod.type_key == "rpc"
-            assert rpc_base._SessTableIndex(
+            assert _rpc_ffi_api.SessTableIndex(
                 libmod) == cur_ctx._rpc_sess._tbl_index
             num_rpc_ctx += 1
             device_type = cur_ctx.device_type % rpc_base.RPC_SESS_MASK
@@ -113,12 +121,12 @@ class GraphModule(object):
 
     Parameters
     ----------
-    module : Module
+    module : tvm.runtime.Module
         The internal tvm module that holds the actual graph functions.
 
     Attributes
     ----------
-    module : Module
+    module : tvm.runtime.Module
         The internal tvm module that holds the actual graph functions.
     """
 
@@ -154,7 +162,12 @@ class GraphModule(object):
             keys = list(params.keys())
             keys.sort(key=lambda x: -np.prod(params[x].shape))
             for k in keys:
-                self._get_input(k).copyfrom(params[k])
+                # TODO(zhiics) Skip the weights for submodule in a better way.
+                # We should use MetadataModule for initialization and remove
+                # params from set_input
+                val = self._get_input(k)
+                if val:
+                    self._get_input(k).copyfrom(params[k])
 
     def run(self, **input_dict):
         """Run forward execution of the graph

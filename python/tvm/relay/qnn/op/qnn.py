@@ -18,7 +18,8 @@
 """QNN dialect operators."""
 
 from __future__ import absolute_import as _abs
-from tvm.relay.expr import Tuple
+from tvm.relay.expr import Tuple, TupleWrapper
+from tvm.relay.op.nn.util import get_pad_tuple2d
 from . import _make
 
 def requantize(data,
@@ -104,7 +105,7 @@ def quantize(data,
     axis : int
         The channel axis for quantization. Default value is -1 which corresponds to the last axis.
     out_dtype : str, optional
-        The data type of the input tensor. Can be [int8, uint8]
+        The data type of the input tensor. Can be [int8, uint8, int32]
     Returns
     -------
     result : tvm.relay.Expr
@@ -131,9 +132,9 @@ def dequantize(data,
     data : tvm.relay.Expr
         The input tensor to be dequantized. Can be of type [int8, uint8].
     input_zero_point : tvm.relay.Expr
-        The output zero_point.
+        The input zero_point.
     input_scale : tvm.relay.Expr
-        The output scale.
+        The input scale.
     Returns
     -------
     result : tvm.relay.Expr
@@ -155,7 +156,7 @@ def concatenate(data,
 
     Parameters
     ----------
-    data : Union(List[relay.Expr], Tuple[relay.Expr])
+    data : Union(List[relay.Expr], Tuple[relay.Expr], TupleWrapper[relay.Expr])
         The list of quantized tensors.
 
     input_scales : List[relay.Expr]
@@ -179,15 +180,16 @@ def concatenate(data,
         The concatenated quantized tensor.
     """
 
-    data = list(data)
-    if not data:
-        raise ValueError("relay.concatenate requires data to be non-empty.")
+    if isinstance(data, (list, tuple)):
+        data = Tuple(data)
+    elif isinstance(data, TupleWrapper):
+        data = data.tuple_value
     if not isinstance(axis, int):
         raise ValueError("For now, we only support integer axis")
     input_scales = list(input_scales)
     input_zero_points = list(input_zero_points)
 
-    return _make.concatenate(Tuple(data),
+    return _make.concatenate(data,
                              Tuple(input_scales),
                              Tuple(input_zero_points),
                              output_scale,
@@ -201,12 +203,12 @@ def conv2d(data,
            kernel_zero_point,
            input_scale,
            kernel_scale,
+           kernel_size,
+           channels,
            strides=(1, 1),
            padding=(0, 0),
            dilation=(1, 1),
            groups=1,
-           channels=None,
-           kernel_size=None,
            data_layout="NCHW",
            kernel_layout="OIHW",
            out_layout="",
@@ -244,6 +246,12 @@ def conv2d(data,
            needed in the pass pipeline after qnn.conv2d is lowered to the
            sequence of steps as in nn.conv2d. See also input_scale in Requantize.
 
+    kernel_size : tuple of int
+        The spatial width and height of the convolution kernel.
+
+    channels : int
+        Number of output channels of this convolution.
+
     strides : tuple of int, optional
         The strides of convolution.
 
@@ -255,12 +263,6 @@ def conv2d(data,
 
     groups : int, optional
         Number of groups for grouped convolution.
-
-    channels : int, optional
-        Number of output channels of this convolution.
-
-    kernel_size : tuple of int, optional
-        The spatial of the convolution kernel.
 
     data_layout : str, optional
         Layout of the input.
@@ -280,6 +282,9 @@ def conv2d(data,
         The computed result.
     """
 
+    # TODO enforce 4-way padding in topi/nn/conv2d after #4644 merged
+    # convert 2-way padding to 4-way padding
+    padding = get_pad_tuple2d(padding)
     return _make.conv2d(data, kernel,
                         input_zero_point, kernel_zero_point,
                         input_scale, kernel_scale,
@@ -305,9 +310,6 @@ def add(lhs,
 
     rhs : relay.Expr
         The right hand side quantized input data.
-
-    lhs_scale: float
-        The scale of the lhs quantized expr.
 
     lhs_scale: relay.Expr
         The scale of the lhs quantized expr.
@@ -345,7 +347,7 @@ def dense(data,
           kernel_zero_point,
           input_scale,
           kernel_scale,
-          units=None,
+          units,
           out_dtype="int32"):
     """Qnn Dense operator.
     Applies a quantized linear transformation
@@ -371,7 +373,7 @@ def dense(data,
         stored for access to this during relay. This information is not
         needed in the pass pipeline after qnn.conv2d is lowered to the
         sequence of steps as in nn.conv2d. See also input_scale in Requantize.
-    units : int, optional
+    units : int
         Number of hidden units of the dense transformation.
     out_dtype : str, optional
         Specifies the output data type for mixed precision dense can be int32 or int16.
@@ -432,3 +434,51 @@ def mul(lhs, rhs, lhs_scale, lhs_zero_point, rhs_scale, rhs_zero_point,
                      lhs_scale, lhs_zero_point,
                      rhs_scale, rhs_zero_point,
                      output_scale, output_zero_point)
+
+
+def subtract(lhs,
+             rhs,
+             lhs_scale,
+             lhs_zero_point,
+             rhs_scale,
+             rhs_zero_point,
+             output_scale,
+             output_zero_point):
+    """Quantized subtraction with numpy-style broadcasting.
+
+    Parameters
+    ----------
+    lhs : relay.Expr
+        The left hand side quantized input data.
+
+    rhs : relay.Expr
+        The right hand side quantized input data.
+
+    lhs_scale: relay.Expr
+        The scale of the lhs quantized expr.
+
+    lhs_zero_point: relay.Expr
+       The zero point of lhs quantized expr.
+
+    rhs_scale: relay.Expr
+        The scale of the rhs quantized expr.
+
+    rhs_zero_point: relay.Expr
+       The zero point of rhs quantized expr.
+
+    output_scale: relay.Expr
+        The scale of the output quantized expr.
+
+    output_zero_point: relay.Expr
+       The zero point of output quantized expr.
+
+    Returns
+    -------
+    result : relay.Expr
+        The computed result.
+
+    """
+    return _make.subtract(lhs, rhs,
+                          lhs_scale, lhs_zero_point,
+                          rhs_scale, rhs_zero_point,
+                          output_scale, output_zero_point)

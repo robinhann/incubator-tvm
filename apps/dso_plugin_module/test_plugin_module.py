@@ -15,11 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 import tvm
+from tvm import te
 import os
 
 def test_plugin_module():
     curr_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
-    mod = tvm.module.load(os.path.join(curr_path, "lib", "plugin_module.so"))
+    mod = tvm.runtime.load_module(os.path.join(curr_path, "lib", "plugin_module.so"))
     # NOTE: we need to make sure all managed resources returned
     # from mod get destructed before mod get unloaded.
     #

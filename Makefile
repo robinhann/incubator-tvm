@@ -17,7 +17,7 @@
 
 ROOTDIR = $(CURDIR)
 
-.PHONY: clean all test doc pylint cpplint lint\
+.PHONY: clean all test doc pylint cpplint scalalint lint\
 	 cython cython2 cython3 web runtime vta
 
 ifndef DMLC_CORE_PATH
@@ -26,6 +26,10 @@ endif
 
 ifndef DLPACK_PATH
   DLPACK_PATH = $(ROOTDIR)/3rdparty/dlpack
+endif
+
+ifndef VTA_HW_PATH
+  VTA_HW_PATH = $(ROOTDIR)/3rdparty/vta-hw
 endif
 
 INCLUDE_FLAGS = -Iinclude -I$(DLPACK_PATH)/include -I$(DMLC_CORE_PATH)/include
@@ -69,7 +73,8 @@ build/libtvm_web_runtime.js: build/libtvm_web_runtime.bc
 cpplint:
 	python3 3rdparty/dmlc-core/scripts/lint.py vta cpp vta/include vta/src
 	python3 3rdparty/dmlc-core/scripts/lint.py topi cpp topi/include;
-	python3 3rdparty/dmlc-core/scripts/lint.py tvm cpp include src \
+	python3 3rdparty/dmlc-core/scripts/lint.py tvm cpp \
+	 include src \
 	 examples/extension/src examples/graph_executor/src
 
 pylint:
@@ -80,6 +85,9 @@ pylint:
 jnilint:
 	python3 3rdparty/dmlc-core/scripts/lint.py tvm4j-jni cpp jvm/native/src
 
+scalalint:
+	make -C $(VTA_HW_PATH)/hardware/chisel lint
+
 lint: cpplint pylint jnilint
 
 doc:
@@ -87,14 +95,11 @@ doc:
 
 javadoc:
 	# build artifact is in jvm/core/target/site/apidocs
-	cd jvm && mvn javadoc:javadoc
+	cd jvm && mvn javadoc:javadoc -Dnotimestamp=true
 
 # Cython build
 cython:
-	cd python; python setup.py build_ext --inplace
-
-cython2:
-	cd python; python2 setup.py build_ext --inplace
+	cd python; python3 setup.py build_ext --inplace
 
 cython3:
 	cd python; python3 setup.py build_ext --inplace

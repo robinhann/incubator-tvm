@@ -22,20 +22,19 @@
  */
 #include <tvm/ir/env_func.h>
 #include <tvm/runtime/registry.h>
-#include <tvm/expr.h>
+#include <tvm/tir/expr.h>
 
 namespace tvm {
-
 
 using runtime::PackedFunc;
 using runtime::TVMArgs;
 using runtime::TVMRetValue;
 
-TVM_STATIC_IR_FUNCTOR(NodePrinter, vtable)
-.set_dispatch<EnvFuncNode>([](const ObjectRef& node, NodePrinter* p) {
-    auto* op = static_cast<const EnvFuncNode*>(node.get());
-    p->stream << "EnvFunc(" << op->name << ")";
-});
+TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
+    .set_dispatch<EnvFuncNode>([](const ObjectRef& node, ReprPrinter* p) {
+      auto* op = static_cast<const EnvFuncNode*>(node.get());
+      p->stream << "EnvFunc(" << op->name << ")";
+    });
 
 ObjectPtr<Object> CreateEnvNode(const std::string& name) {
   auto* f = runtime::Registry::Get(name);
@@ -46,31 +45,24 @@ ObjectPtr<Object> CreateEnvNode(const std::string& name) {
   return n;
 }
 
-EnvFunc EnvFunc::Get(const std::string& name) {
-  return EnvFunc(CreateEnvNode(name));
-}
+EnvFunc EnvFunc::Get(const String& name) { return EnvFunc(CreateEnvNode(name)); }
 
-TVM_REGISTER_GLOBAL("_EnvFuncGet")
-.set_body_typed(EnvFunc::Get);
+TVM_REGISTER_GLOBAL("ir.EnvFuncGet").set_body_typed(EnvFunc::Get);
 
-TVM_REGISTER_GLOBAL("_EnvFuncCall")
-.set_body([](TVMArgs args, TVMRetValue* rv) {
-    EnvFunc env = args[0];
-    CHECK_GE(args.size(), 1);
-    env->func.CallPacked(TVMArgs(args.values + 1,
-                                 args.type_codes + 1,
-                                 args.size() - 1), rv);
-  });
+TVM_REGISTER_GLOBAL("ir.EnvFuncCall").set_body([](TVMArgs args, TVMRetValue* rv) {
+  EnvFunc env = args[0];
+  CHECK_GE(args.size(), 1);
+  env->func.CallPacked(TVMArgs(args.values + 1, args.type_codes + 1, args.size() - 1), rv);
+});
 
-TVM_REGISTER_GLOBAL("_EnvFuncGetPackedFunc")
-.set_body_typed([](const EnvFunc&n) {
-    return n->func;
-  });
+TVM_REGISTER_GLOBAL("ir.EnvFuncGetPackedFunc").set_body_typed([](const EnvFunc& n) {
+  return n->func;
+});
 
 TVM_REGISTER_NODE_TYPE(EnvFuncNode)
-.set_creator(CreateEnvNode)
-.set_global_key([](const Object* n) -> std::string {
-    return static_cast<const EnvFuncNode*>(n)->name;
-  });
+    .set_creator(CreateEnvNode)
+    .set_repr_bytes([](const Object* n) -> std::string {
+      return static_cast<const EnvFuncNode*>(n)->name;
+    });
 
 }  // namespace tvm

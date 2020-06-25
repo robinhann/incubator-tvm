@@ -24,6 +24,11 @@
 #ifndef TVM_RELAY_OP_NN_NN_H_
 #define TVM_RELAY_OP_NN_NN_H_
 
+#include <tvm/ir/attrs.h>
+#include <tvm/ir/expr.h>
+#include <tvm/node/container.h>
+#include <tvm/relay/type.h>
+
 #include <utility>
 
 namespace tvm {
@@ -52,11 +57,15 @@ bool DenseRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
     // data dtype as the weight dtype. However if weight dtype is explicitly
     // present we will use that.
     auto weight_dtype = (weight == nullptr ? data->dtype : weight->dtype);
-    reporter->Assign(types[1], TensorTypeNode::make(wshape, weight_dtype));
+    reporter->Assign(types[1], TensorType(wshape, weight_dtype));
     oshape.Set((oshape.size() - 1), param->units);
   } else {
     if (weight == nullptr) return false;
     Array<tvm::PrimExpr> wshape = weight->shape;
+    CHECK(static_cast<int>(weight->shape.size()) == 2);
+    CHECK(reporter->AssertEQ(data->shape[data->shape.size() - 1], weight->shape[1]))
+        << "DenseRel: input dimension doesn't match,"
+        << " data shape=" << data->shape << ", weight shape=" << weight->shape;
     oshape.Set((oshape.size() - 1), wshape[0]);
   }
 
@@ -65,7 +74,7 @@ bool DenseRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
     out_dtype = data->dtype;
   }
   // assign output type
-  reporter->Assign(types[2], TensorTypeNode::make(oshape, out_dtype));
+  reporter->Assign(types[2], TensorType(oshape, out_dtype));
   return true;
 }
 

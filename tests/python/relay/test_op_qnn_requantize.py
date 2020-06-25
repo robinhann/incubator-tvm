@@ -16,6 +16,7 @@
 # under the License.
 
 import tvm
+from tvm import te
 import numpy as np
 from tvm import relay
 from tvm.contrib import graph_runtime
@@ -23,7 +24,7 @@ from tvm.contrib import graph_runtime
 roundings = ["UPWARD", "TONEAREST"]
 
 def verify(mod, goldens):
-    with relay.build_config(opt_level=3):
+    with tvm.transform.PassContext(opt_level=3):
         graph, lib, params = relay.build(mod, "llvm", params=None)
         golden_data, golden_output = goldens
         rt_mod = graph_runtime.create(graph, lib, ctx=tvm.cpu(0))
@@ -59,7 +60,7 @@ def get_mod(data_shape, data_dtype, out_dtype, input_scale, output_scale,
             out_dtype=out_dtype)
 
     mod = relay.Function(relay.analysis.free_vars(mod), mod)
-    mod = relay.Module.from_expr(mod)
+    mod = tvm.IRModule.from_expr(mod)
     return mod
 
 def test_same_scale():
@@ -310,6 +311,21 @@ def test_per_channel_different_scale():
                       axis=1,
                       rounding=rounding)
         verify(mod, (golden_data, golden_output))
+
+    # Have input scale > output scale
+    golden_data = np.arange(-5, 5, 1).astype('int32').reshape((5,2))
+    golden_output = np.array([-10, -2, -6, -1, -2, 0, 2, 1, 6, 2]).reshape((5, 2))
+
+    for rounding in roundings:
+        mod = get_mod(data_shape=(5, 2),
+                      data_dtype='int32',
+                      out_dtype="int8",
+                      input_scale=[1.0, 0.25],
+                      output_scale=0.5,
+                      axis=1,
+                      rounding=rounding)
+        verify(mod, (golden_data, golden_output))
+
 
 if __name__ == "__main__":
     test_same_scale()

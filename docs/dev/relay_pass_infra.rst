@@ -78,7 +78,7 @@ C++ Backend
 We provide a ``PassInfo`` object to contain the basic information needed by
 a pass. ``name`` is the pass name, ``opt_level`` indicates at which optimization
 level the pass will be enabled, and ``required`` represents the passes that are
-required to execute a certain pass (see `include/tvm/relay/transform.h`_ for
+required to execute a certain pass (see `include/tvm/ir/transform.h`_ for
 more details). For example, during registration of a pass (will be covered in
 later), the pass developers can specify the name of the pass, the optimization
 level it will be performed at, and/or the passes that are required.
@@ -169,12 +169,12 @@ subclasses at the level of modules, functions, or sequences of passes..
 
     class PassNode : RelayNode {
       virtual PassInfo Info() const = 0;
-      virtual Module operator()(const Module& mod
+      virtual Module operator()(const IRModule& mod
                                 const PassContext& pass_ctx) const = 0;
     };
 
-The functor shows how a pass must be realized, i.e. it always works on a `Relay
-module`_ under a certain context. All passes are designed in a ``Module`` to ``Module``
+The functor shows how a pass must be realized, i.e. it always works on a
+:py:class:`IRModule` under a certain context. All passes are designed in a ``Module`` to ``Module``
 manner. Therefore, optimizations governed by the pass infra will
 always update the whole module.
 
@@ -183,7 +183,7 @@ optimization passes, e.g., function-level passes, module-level passes, and
 sequential passes.  Each subclass itself could act as a pass manager. For
 instance, they could collect the required passes and execute them or build
 a dependency graph based on the given metadata. The full definition of them
-can be found in `src/relay/pass/pass_manager.cc`_
+can be found in `src/relay/ir/transform.cc`_ and `src/ir/transform.cc`_.
 
 Module-Level Passes
 ^^^^^^^^^^^^^^^^^^^
@@ -344,13 +344,13 @@ registration.
 .. code:: c++
 
     // Create a simple Relay program.
-    auto tensor_type = relay::TensorTypeNode::make({}, tvm::Bool());
-    auto x = relay::VarNode::make("x", relay::Type());
-    auto f = relay::FunctionNode::make(tvm::Array<relay::Var>{ x }, x, relay::Type(), {});
+    auto tensor_type = relay::TensorType({}, tvm::Bool());
+    auto x = relay::Var("x", relay::Type());
+    auto f = relay::Function(tvm::Array<relay::Var>{ x }, x, relay::Type(), {});
 
-    auto y = relay::VarNode::make("y", tensor_type);
-    auto call = relay::CallNode::make(f, tvm::Array<relay::Expr>{ y });
-    auto fx = relay::FunctionNode::make(tvm::Array<relay::Var>{ y }, call, relay::Type(), {});
+    auto y = relay::Var("y", tensor_type);
+    auto call = relay::Call(f, tvm::Array<relay::Expr>{ y });
+    auto fx = relay::Function(tvm::Array<relay::Var>{ y }, call, relay::Type(), {});
 
     // Create a module for optimization.
     auto mod = IRModule::FromExpr(fx);
@@ -582,7 +582,7 @@ using ``Sequential`` associated with other types of passes.
     func = relay.Function([x], z2)
 
     # Customize the optimization pipeline.
-    seq = _transform.Sequential([
+    seq = tvm.transform.Sequential([
         relay.transform.InferType(),
         relay.transform.FoldConstant(),
         relay.transform.EliminateCommonSubexpr(),
@@ -609,10 +609,10 @@ sequential pass example could be like the following to enable IR dumping for
 
 .. code:: python
 
-    seq = _transform.Sequential([
+    seq = tvm.transform.Sequential([
         relay.transform.InferType(),
         relay.transform.FoldConstant(),
-        relay.transform.PrintIR(),
+        transform.PrintIR(),
         relay.transform.EliminateCommonSubexpr(),
         relay.transform.AlterOpLayout()
     ])
@@ -620,6 +620,26 @@ sequential pass example could be like the following to enable IR dumping for
 By inserting the ``PrintIR`` pass after ``FoldConstant``, the pass infra will
 dump out the module IR when ``FoldConstant`` is done. Users can plug in this
 pass after any pass they want to debug for viewing the optimization effect.
+
+There is a more flexible debugging mechanism also exposed by the build configuration
+object. One can pass a tracing function which can be used to execute arbitrary code
+before and/or after each pass. A tracing function will receive a ``IRModule``, ``PassInfo``,
+and a boolean indicating whether you are executing before, or after a pass.
+An example is below.
+
+.. code:: python
+
+    def print_ir(mod, info, is_before):
+        """Print the name of the pass, the IR, only before passes execute."""
+        if is_before:
+            print(f"Running pass: {}", info)
+            print(mod)
+
+    with relay.build_config(opt_level=3, trace=print_ir):
+            with tvm.target.create("llvm"):
+                # Perform the optimizations.
+                mod = seq(mod)
+
 
 For more pass infra related examples in Python and C++, please refer to
 `tests/python/relay/test_pass_manager.py`_ and
@@ -629,11 +649,11 @@ For more pass infra related examples in Python and C++, please refer to
 
 .. _Block: https://mxnet.incubator.apache.org/api/python/docs/api/gluon/block.html#gluon-block
 
-.. _Relay module: https://docs.tvm.ai/langref/relay_expr.html#module-and-global-functions
+.. _include/tvm/ir/transform.h: https://github.com/apache/incubator-tvm/blob/master/include/tvm/ir/transform.h
 
-.. _include/tvm/relay/transform.h: https://github.com/apache/incubator-tvm/blob/master/include/tvm/relay/transform.h
+.. _src/relay/ir/transform.cc: https://github.com/apache/incubator-tvm/blob/master/src/relay/ir/transform.cc
 
-.. _src/relay/pass/pass_manager.cc: https://github.com/apache/incubator-tvm/blob/master/src/relay/pass/pass_manager.cc
+.. _src/ir/transform.cc: https://github.com/apache/incubator-tvm/blob/master/src/ir/transform.cc
 
 .. _src/relay/pass/fold_constant.cc: https://github.com/apache/incubator-tvm/blob/master/src/relay/pass/fold_constant.cc
 
@@ -642,3 +662,5 @@ For more pass infra related examples in Python and C++, please refer to
 .. _tests/python/relay/test_pass_manager.py: https://github.com/apache/incubator-tvm/blob/master/tests/python/relay/test_pass_manager.py
 
 .. _tests/cpp/relay_transform_sequential.cc: https://github.com/apache/incubator-tvm/blob/master/tests/cpp/relay_transform_sequential.cc
+
+.. _include/tvm/relay/transform.h: https://github.com/apache/incubator-tvm/blob/master/include/tvm/relay/transform.h
