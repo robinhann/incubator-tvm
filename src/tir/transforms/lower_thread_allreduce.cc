@@ -40,7 +40,7 @@ namespace tir {
 class ThreadAllreduceBuilder final : public StmtExprMutator {
  public:
   explicit ThreadAllreduceBuilder(const TargetNode* target)
-      : target_(target), warp_size_(target->thread_warp_size) {}
+      : target_(target), warp_size_(target->GetAttr<Integer>("thread_warp_size", 1).value()) {}
 
   Stmt VisitStmt_(const AttrStmtNode* op) final {
     if (op->attr_key == attr::thread_extent) {
@@ -242,8 +242,7 @@ class ThreadAllreduceBuilder final : public StmtExprMutator {
       Var mask_var("mask", DataType::UInt(32));
       {
         PrimExpr pred = const_true(1);
-        PrimExpr mask =
-            Call(DataType::UInt(32), builtin::tvm_warp_activemask(), {}, CallNode::Intrinsic);
+        PrimExpr mask = Call(DataType::UInt(32), builtin::tvm_warp_activemask(), {});
         seq.emplace_back(Store(mask_var, mask, index, pred));
         // Push allocation with an empty body. Later this will be fixed
         // when the entire body is ready.
@@ -464,8 +463,7 @@ class ThreadAllreduceBuilder final : public StmtExprMutator {
   }
   // sync thread op.
   static Stmt SyncThread(const std::string& sync) {
-    return Evaluate(Call(DataType::Int(32), builtin::tvm_storage_sync(), {StringImm(sync)},
-                         CallNode::Intrinsic));
+    return Evaluate(Call(DataType::Int(32), builtin::tvm_storage_sync(), {StringImm(sync)}));
   }
 
   // Emit warp shuffle  calls.
@@ -475,7 +473,7 @@ class ThreadAllreduceBuilder final : public StmtExprMutator {
     PrimExpr mask = Load(DataType::UInt(32), mask_var, index, pred);
     PrimExpr width = IntImm(DataType::Int(32), warp_size_);
     Array<PrimExpr> args{mask, val, IntImm(DataType::Int(32), delta_or_lane), width, width};
-    return Call(val.dtype(), op, args, CallNode::Intrinsic);
+    return Call(val.dtype(), op, args);
   }
 
   // Check if this is a reduction on threadIdx.x and its extent matches
@@ -486,11 +484,10 @@ class ThreadAllreduceBuilder final : public StmtExprMutator {
   // Also, the warp/wavefront size differs (64 on rocm, 32 on cuda).
   bool is_warp_reduction(const std::vector<DataType>& types) const {
     // Only cuda target supports warp reductions.
-    if ((target_->target_name != "cuda") && (target_->target_name != "rocm")) return false;
+    if ((target_->id->name != "cuda") && (target_->id->name != "rocm")) return false;
 
     // rocm only supports 32 bit operands for shuffling at the moment
-    if ((target_->target_name == "rocm") &&
-        (std::any_of(types.begin(), types.end(), [](DataType ty) {
+    if ((target_->id->name == "rocm") && (std::any_of(types.begin(), types.end(), [](DataType ty) {
           if (ty.is_vector()) return true;
           return ty.bits() != 32;
         }))) {

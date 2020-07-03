@@ -51,7 +51,7 @@ PrimFunc MakePackedAPI(PrimFunc&& func, int num_unpacked_args) {
 
   auto target = func->GetAttr<Target>(tvm::attr::kTarget);
   CHECK(target.defined()) << "MakePackedAPI: Require the target attribute";
-  int target_device_type = target.value()->device_type;
+  int target_device_type = target.value()->id->device_type;
 
   std::string name_hint = global_symbol.value();
 
@@ -86,7 +86,7 @@ PrimFunc MakePackedAPI(PrimFunc&& func, int num_unpacked_args) {
                               IntImm(DataType::Int(32), builtin::kTVMValueContent)};
     // load 64 bit version
     DataType api_type = APIType(t);
-    PrimExpr res = Call(api_type, builtin::tvm_struct_get(), call_args, CallNode::PureIntrinsic);
+    PrimExpr res = Call(api_type, builtin::tvm_struct_get(), call_args);
     // cast to the target version.
     if (api_type != t) {
       res = Cast(t, res);
@@ -191,8 +191,7 @@ PrimFunc MakePackedAPI(PrimFunc&& func, int num_unpacked_args) {
     if (runtime::DeviceAPI::NeedSetDeviceContext(target_device_type)) {
       Stmt set_device =
           Evaluate(Call(DataType::Int(32), builtin::tvm_call_packed(),
-                        {StringImm(runtime::symbol::tvm_set_device), device_type, device_id},
-                        CallNode::Intrinsic));
+                        {StringImm(runtime::symbol::tvm_set_device), device_type, device_id}));
       body = SeqStmt({set_device, body});
     }
   }

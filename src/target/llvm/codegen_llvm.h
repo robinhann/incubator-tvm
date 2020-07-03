@@ -264,7 +264,6 @@ class CodeGenLLVM : public ExprFunctor<llvm::Value*(const PrimExpr&)>,
   llvm::Value* CreateMul(DataType t, llvm::Value* a, llvm::Value* b);
   llvm::Value* CreateBroadcast(llvm::Value* value, int lanes);
   llvm::Value* CreateBufferPtr(DataType t, llvm::Value* buffer, llvm::Value* index);
-  llvm::Value* CreateBufferVecPtr(DataType t, llvm::Value* buffer, llvm::Value* index);
   // Vector concatenation.
   llvm::Value* CreateVecSlice(llvm::Value* vec, int begin, int extent);
   llvm::Value* CreateVecFlip(llvm::Value* vec);
@@ -326,7 +325,10 @@ class CodeGenLLVM : public ExprFunctor<llvm::Value*(const PrimExpr&)>,
   // global symbol table.
   OpAttrMap<TGlobalSymbol> op_attr_global_symbol_ = Op::GetAttrMap<TGlobalSymbol>("TGlobalSymbol");
   const Op& builtin_call_extern_ = builtin::call_extern();
+  const Op& builtin_call_pure_extern_ = builtin::call_pure_extern();
   const Op& builtin_call_llvm_intrin_ = builtin::call_llvm_intrin();
+  const Op& builtin_call_llvm_pure_intrin_ = builtin::call_llvm_pure_intrin();
+
   /*! \brief Helper struct for debug infos. */
   struct DebugInfo {
     std::unique_ptr<llvm::DIBuilder> di_builder_;
