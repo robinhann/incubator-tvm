@@ -87,7 +87,7 @@ struct TypeIndex {
  *      the type index will be assigned during runtime.
  *      Runtime type index can be accessed by ObjectType::TypeIndex();
  * - _type_key:
- *       The unique string identifier of tyep type.
+ *       The unique string identifier of the type.
  * - _type_final:
  *       Whether the type is terminal type(there is no subclass of the type in the object system).
  *       This field is automatically set by macro TVM_DECLARE_FINAL_OBJECT_INFO
@@ -133,19 +133,19 @@ struct TypeIndex {
  *    TVM_DECLARE_BASE_OBJECT_INFO(BaseObj, Object);
  *  };
  *
- *  class ObjLeaf : public ObjBase {
+ *  class LeafObj : public BaseObj {
  *   public:
  *    // fields
  *    int child_field0;
  *    // object properties
  *    static constexpr const uint32_t _type_index = TypeIndex::kDynamic;
  *    static constexpr const char* _type_key = "test.LeafObj";
- *    TVM_DECLARE_BASE_OBJECT_INFO(LeaffObj, Object);
+ *    TVM_DECLARE_BASE_OBJECT_INFO(LeafObj, Object);
  *  };
  *
  *  // The following code should be put into a cc file.
- *  TVM_REGISTER_OBJECT_TYPE(ObjBase);
- *  TVM_REGISTER_OBJECT_TYPE(ObjLeaf);
+ *  TVM_REGISTER_OBJECT_TYPE(BaseObj);
+ *  TVM_REGISTER_OBJECT_TYPE(LeafObj);
  *
  *  // Usage example.
  *  void TestObjects() {
@@ -160,7 +160,7 @@ struct TypeIndex {
  *
  * \endcode
  */
-class Object {
+class TVM_DLL Object {
  public:
   /*!
    * \brief Object deleter
@@ -191,19 +191,19 @@ class Object {
    * \param tindex The type index.
    * \return the result.
    */
-  TVM_DLL static std::string TypeIndex2Key(uint32_t tindex);
+  static std::string TypeIndex2Key(uint32_t tindex);
   /*!
    * \brief Get the type key hash of the corresponding index from runtime.
    * \param tindex The type index.
    * \return the related key-hash.
    */
-  TVM_DLL static size_t TypeIndex2KeyHash(uint32_t tindex);
+  static size_t TypeIndex2KeyHash(uint32_t tindex);
   /*!
    * \brief Get the type index of the corresponding key from runtime.
    * \param key The type key.
    * \return the result.
    */
-  TVM_DLL static uint32_t TypeKey2Index(const std::string& key);
+  static uint32_t TypeKey2Index(const std::string& key);
 
 #if TVM_OBJECT_ATOMIC_REF_COUNTER
   using RefCounterType = std::atomic<int32_t>;
@@ -281,10 +281,9 @@ class Object {
    * \param type_child_slots_can_overflow Whether to allow child to overflow the slots.
    * \return The allocated type index.
    */
-  TVM_DLL static uint32_t GetOrAllocRuntimeTypeIndex(const std::string& key, uint32_t static_tindex,
-                                                     uint32_t parent_tindex,
-                                                     uint32_t type_child_slots,
-                                                     bool type_child_slots_can_overflow);
+  static uint32_t GetOrAllocRuntimeTypeIndex(const std::string& key, uint32_t static_tindex,
+                                             uint32_t parent_tindex, uint32_t type_child_slots,
+                                             bool type_child_slots_can_overflow);
 
   // reference counter related operations
   /*! \brief developer function, increases reference counter. */
@@ -306,7 +305,7 @@ class Object {
    * \param parent_tindex The parent type index.
    * \return The derivation results.
    */
-  TVM_DLL bool DerivedFrom(uint32_t parent_tindex) const;
+  bool DerivedFrom(uint32_t parent_tindex) const;
   // friend classes
   template <typename>
   friend class ObjAllocatorBase;
@@ -634,7 +633,7 @@ struct ObjectPtrEqual {
  * \param ParentType The name of the ParentType
  */
 #define TVM_DECLARE_BASE_OBJECT_INFO(TypeName, ParentType)                                     \
-  static_assert(!ParentType::_type_final, "ParentObj maked as final");                         \
+  static_assert(!ParentType::_type_final, "ParentObj marked as final");                        \
   static uint32_t RuntimeTypeIndex() {                                                         \
     static_assert(TypeName::_type_child_slots == 0 || ParentType::_type_child_slots == 0 ||    \
                       TypeName::_type_child_slots < ParentType::_type_child_slots,             \

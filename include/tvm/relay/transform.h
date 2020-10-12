@@ -117,6 +117,21 @@ TVM_DLL Pass FuseOps(int fuse_opt_level = -1);
 TVM_DLL Pass RewriteAnnotatedOps(int fallback_device);
 
 /*!
+ * \brief Turn an expression to Basic Block Normal Form.
+ *
+ * We define a block as a group of expressions implied by the scope structure.
+ *
+ * Each graph node can only belong to a single block.
+ *
+ * For any value that is being used in multiple blocks, it has to be referred
+ * by a Var which is defined in a block, whose scope is the least common ancestor
+ * of blocks this value is used.
+ *
+ * \return The pass.
+ */
+TVM_DLL Pass ToBasicBlockNormalForm();
+
+/*!
  * \brief turn a dataflow graph into Administrative Normal Form, or A-Normal Form (ANF).
  *
  * It will turn an expression that is in a graph form (with sharing implicit),
@@ -131,6 +146,15 @@ TVM_DLL Pass RewriteAnnotatedOps(int fallback_device);
  * \return The pass.
  */
 TVM_DLL Pass ToANormalForm();
+
+/*!
+ * \brief ToANormalForm but on incomplete graph.
+ *
+ * \param expr the graph.
+ *
+ * \return The transformed program.
+ */
+TVM_DLL Expr ToANormalForm(const Expr& expr);
 
 /*!
  * \brief Turn an expression into continuation passing style(CPS).
@@ -185,6 +209,17 @@ TVM_DLL Pass SimplifyInference();
 TVM_DLL Pass FastMath();
 
 /*!
+ * \brief Find Dynamic ops and make them static
+ *
+ * Searches the graph for dynamic ops. If the dynamic inputs to those ops are constants, it replaces
+ * them with static ops and re-performs type inference and constant folding. The pass repeats
+ * itself until the graph stops changing or we run too many iterations.
+ *
+ * \return The pass.
+ */
+TVM_DLL Pass DynamicToStatic();
+
+/*!
  * \brief Infer the type of an expression.
  *
  * The result of type checking is a new expression with unambigous
@@ -223,10 +258,12 @@ TVM_DLL Pass CombineParallelConv2D(uint64_t min_num_branches = 3);
  * `min_num_branch`.
  *
  * \param min_num_branches The minimun number of branches.
+ * \param to_batch_matmul Whether to combine parallel dense ops to batch matmul.
+ *                        If set false, combine dense ops to single dense op.
  *
  * \return The pass.
  */
-TVM_DLL Pass CombineParallelDense(uint64_t min_num_branches = 3);
+TVM_DLL Pass CombineParallelDense(uint64_t min_num_branches = 3, bool to_batch_matmul = true);
 
 /*!
  * \brief Combine parallel batch_matmul ops into a single batch_matmul
@@ -360,6 +397,13 @@ TVM_DLL Pass Inline();
  */
 TVM_DLL Pass RemoveUnusedFunctions(Array<runtime::String> entry_functions);
 
+/*!
+ * \brief Simplify the Relay expression.
+ *
+ * \return The pass.
+ */
+TVM_DLL Pass SimplifyExpr();
+
 }  // namespace transform
 
 /*!
@@ -373,18 +417,6 @@ TVM_DLL Pass RemoveUnusedFunctions(Array<runtime::String> entry_functions);
  * \return The updated expression.
  */
 TVM_DLL Expr Bind(const Expr& expr, const tvm::Map<Var, Expr>& binds);
-
-/*!
- * \brief Infer the type of a function as if it is mapped to var in the mod.
- *
- * \param f the function.
- * \param mod The module used for referencing global functions.
- * \param var The global variable corresponding to the function.
- *
- * \return A type checked Function with its checked_type field populated.
- * \note this function mutates mod and is not thread-safe.
- */
-TVM_DLL Function InferType(const Function& f, const IRModule& mod, const GlobalVar& var);
 
 /*!
  * \brief Apply rewrite rules to rewrite the expr in post DFS order. This

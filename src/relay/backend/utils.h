@@ -118,6 +118,23 @@ inline const runtime::TypedPackedFunc<R(Args...)> GetTypedPackedFunc(const std::
   CHECK(pf != nullptr) << "can not find packed function";
   return runtime::TypedPackedFunc<R(Args...)>(*pf);
 }
+
+/*!
+ * \brief Extract shape from an IndexExpr array to std::vector<int64_t>
+ *
+ * \param shape The shape in Array
+ * \return The converted shape in std::vector<int64_t>
+ */
+inline std::vector<int64_t> GetIntShape(const Array<IndexExpr>& shape) {
+  std::vector<int64_t> ret;
+  for (const auto& dim : shape) {
+    const int64_t* pval = tir::as_const_int(dim);
+    CHECK(pval) << "Expect integer, but received: " << dim->GetTypeKey();
+    ret.push_back(*pval);
+  }
+  return ret;
+}
+
 /*!
  * \brief Convert type to string
  *
@@ -132,8 +149,12 @@ inline std::string DType2String(const tvm::DataType dtype) {
     os << "int";
   } else if (dtype.is_uint()) {
     os << "uint";
+  } else if ((*GetPackedFunc("runtime._datatype_get_type_registered"))(dtype.code())) {
+    os << "custom["
+       << (*GetPackedFunc("runtime._datatype_get_type_name"))(dtype.code()).operator std::string()
+       << "]";
   } else {
-    LOG(FATAL) << "Unknown type";
+    LOG(FATAL) << "Unknown type with code " << static_cast<unsigned>(dtype.code());
   }
   os << dtype.bits();
   return os.str();
@@ -229,6 +250,18 @@ inline const CallNode* GetRootCall(const CallNode* current_call, int depth,
 
   const auto* next_call = current_call->args[0].as<CallNode>();
   return GetRootCall(next_call, depth - 1, expected_op_names);
+}
+
+/*!
+ * \brief Get the external symbol of the Relay function name.
+ *
+ * \param func The provided function.
+ * \return An external symbol.
+ */
+inline std::string GetExtSymbol(const Function& func) {
+  const auto name_node = func->GetAttr<String>(tvm::attr::kGlobalSymbol);
+  CHECK(name_node.defined()) << "Fail to retrieve external symbol.";
+  return std::string(name_node.value());
 }
 
 }  // namespace backend

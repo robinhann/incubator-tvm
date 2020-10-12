@@ -33,8 +33,6 @@ pub struct TypeMismatchError {
 
 #[derive(Debug, Error)]
 pub enum NDArrayError {
-    #[error("Missing NDArray shape.")]
-    MissingShape,
     #[error("Cannot convert from an empty array.")]
     EmptyArray,
     #[error("Invalid datatype when attempting to convert ndarray.")]
@@ -68,6 +66,8 @@ pub enum Error {
     CallFailed(String),
     #[error("this case will never occur")]
     Infallible(#[from] std::convert::Infallible),
+    #[error("a panic occurred while executing a Rust packed function")]
+    Panic,
 }
 
 impl Error {

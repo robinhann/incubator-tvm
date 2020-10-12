@@ -82,7 +82,7 @@ struct CachedFuncNode : public Object {
   /*! \brief The schedule to the function */
   te::Schedule schedule;
   /*! \brief The lowered functions to support the function. */
-  IRModule funcs = IRModule();
+  IRModule funcs = IRModule(Map<GlobalVar, BaseFunc>({}));
 
   /*! \brief Parameter usage states in the shape function. */
   tvm::Array<Integer> shape_func_param_states;
@@ -238,7 +238,7 @@ class CompileEngine : public ObjectRef {
   CompileEngineNode* operator->() { return static_cast<CompileEngineNode*>(get_mutable()); }
   using ContainerType = CompileEngineNode;
   /*! \brief The global compile engine. */
-  TVM_DLL static const CompileEngine& Global();
+  TVM_DLL static CompileEngine& Global();
 };
 
 /*!

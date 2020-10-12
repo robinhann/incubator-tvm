@@ -44,7 +44,11 @@ bool SimulatedQuantizeRel(const Array<Type>& types, int num_inputs, const Attrs&
   CHECK(param != nullptr);
 
   const auto* data = types[0].as<TensorTypeNode>();
-  CHECK(data != nullptr);
+
+  if (data == nullptr) {
+    return false;
+  }
+
   CHECK_NE(data->shape.size(), 0) << "Input shape cannot be empty";
 
   reporter->Assign(types[1], TensorType({}, DataType::Float(32)));  // dom_scale
@@ -125,7 +129,8 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       p->stream << "do_simulation==" << op->do_simulation << ", ";
       p->stream << "round_for_shift==" << op->round_for_shift << ", ";
       p->stream << "debug_enabled_ops==" << op->debug_enabled_ops << ", ";
-      p->stream << "rounding==" << op->rounding;
+      p->stream << "rounding==" << op->rounding << ", ";
+      p->stream << "partition_conversions==" << op->partition_conversions;
       p->stream << ")";
     });
 

@@ -30,6 +30,7 @@
 
 #include <algorithm>
 
+#include "../target/datatype/registry.h"
 #include "const_fold.h"
 #include "pattern_match.h"
 
@@ -125,6 +126,8 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const AddNode* op) {
   PVar<PrimExpr> x, y, z, b1, b2, s1, s2;
   // Pattern var match IntImm
   PVar<IntImm> c1, c2, c3;
+  // Pattern var match FloatImm
+  PVar<FloatImm> c4;
   // Pattern var for lanes in broadcast and ramp
   PVar<int> lanes;
   // Vector rules
@@ -133,6 +136,7 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const AddNode* op) {
     TVM_TRY_REWRITE(ramp(b1, s1, lanes) + broadcast(x, lanes), ramp(b1 + x, s1, lanes));
     TVM_TRY_REWRITE(broadcast(x, lanes) + ramp(b1, s1, lanes), ramp(x + b1, s1, lanes));
     TVM_TRY_REWRITE(broadcast(x, lanes) + broadcast(y, lanes), broadcast(x + y, lanes));
+    TVM_TRY_REWRITE_IF(x + broadcast(c4, lanes), x, c4.Eval()->value == 0.0f);
   }
 
   if (IsIndexType(op->dtype)) {
@@ -416,6 +420,8 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const MulNode* op) {
   PVar<PrimExpr> x, y, z, b1, b2, s1, s2;
   // Pattern var match IntImm
   PVar<IntImm> c1, c2;
+  // Pattern var match FloatImm
+  PVar<FloatImm> c3;
   // Pattern var for lanes in broadcast and ramp
   PVar<int> lanes;
   // Vector rules
@@ -423,6 +429,7 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const MulNode* op) {
     TVM_TRY_REWRITE(broadcast(x, lanes) * broadcast(y, lanes), broadcast(x * y, lanes));
     TVM_TRY_REWRITE(ramp(b1, s1, lanes) * broadcast(x, lanes), ramp(b1 * x, s1 * x, lanes));
     TVM_TRY_REWRITE(broadcast(x, lanes) * ramp(b1, s1, lanes), ramp(b1 * x, s1 * x, lanes));
+    TVM_TRY_REWRITE_IF(broadcast(c3, lanes) * x, broadcast(c3, lanes), c3.Eval()->value == 0.0f);
   }
 
   if (IsIndexType(op->dtype)) {
@@ -454,7 +461,8 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const DivNode* op) {
 
   // x / 2.0 = x * 0.5
   if (const FloatImmNode* ptr = op->b.as<FloatImmNode>()) {
-    CHECK(op->dtype.is_float());
+    CHECK(op->dtype.is_float() ||
+          datatype::Registry::Global()->GetTypeRegistered(op->dtype.code()));
     return op->a * make_const(op->b.dtype(), 1.0 / ptr->value);
   }
 
@@ -1529,7 +1537,7 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const CallNode* op) {
   } else if (op->op.same_as(tir::builtin::shift_left())) {
     if (op->args[0].as<IntImmNode>() && op->args[1].as<IntImmNode>()) {
       // the operator overload will eagerly constant fold.
-      return op->args[0] & op->args[1];
+      return op->args[0] << op->args[1];
     }
   }
   ExprDeepEqual expr_equal;

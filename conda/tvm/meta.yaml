@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-{% set version = "0.7.dev1" %}
+{% set version = "0.8.dev0" %}
 
 package:
   name: tvm
@@ -47,7 +47,6 @@ requirements:
 test:
   imports:
     - tvm
-    - topi
   requires:
     - pytest
     - scipy

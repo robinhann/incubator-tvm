@@ -27,11 +27,11 @@
 #include <tvm/relay/qnn/transform.h>
 #include <tvm/relay/transform.h>
 #include <tvm/runtime/device_api.h>
-#include <tvm/runtime/vm.h>
 
 #include <memory>
 
 #include "../../target/source/codegen_source_base.h"
+#include "compile_engine.h"
 #include "utils.h"
 
 namespace tvm {
@@ -225,6 +225,8 @@ class RelayBuildModule : public runtime::ModuleNode {
     targets_ = targets;
     target_host_ = target_host;
     BuildRelay(mod, params_);
+    // Clear compile engine so that tuning schedules can be changed between runs. See issue #6096.
+    CompileEngine::Global()->Clear();
   }
 
  protected:
@@ -239,6 +241,8 @@ class RelayBuildModule : public runtime::ModuleNode {
    */
   IRModule Optimize(IRModule relay_module, const TargetsMap& targets,
                     const std::unordered_map<std::string, runtime::NDArray>& params) {
+    ICHECK(relay_module.defined()) << "The IRModule must be defined for the Relay compiler.";
+
     if (params.size()) {
       CHECK(relay_module->ContainGlobalVar("main")) << "Missing the main entry function";
       GlobalVar main_glb_var = relay_module->GetGlobalVar("main");
@@ -251,6 +255,7 @@ class RelayBuildModule : public runtime::ModuleNode {
     Array<Pass> pass_seqs;
     Array<runtime::String> entry_functions{"main"};
     pass_seqs.push_back(transform::RemoveUnusedFunctions(entry_functions));
+    pass_seqs.push_back(transform::ToBasicBlockNormalForm());
 
     // Run all dialect legalization passes.
     pass_seqs.push_back(relay::qnn::transform::Legalize());
@@ -259,6 +264,9 @@ class RelayBuildModule : public runtime::ModuleNode {
     if (targets.size() == 1) {
       pass_seqs.push_back(transform::Legalize());
     }
+
+    // Convert Dynamic ops to static versions
+    pass_seqs.push_back(transform::DynamicToStatic());
 
     pass_seqs.push_back(transform::SimplifyInference());
     PackedFunc fskip = PackedFunc([](TVMArgs args, TVMRetValue* rv) {
@@ -276,6 +284,7 @@ class RelayBuildModule : public runtime::ModuleNode {
       }
     });
     pass_seqs.push_back(transform::EliminateCommonSubexpr(fskip));
+    pass_seqs.push_back(transform::SimplifyExpr());
     pass_seqs.push_back(transform::CombineParallelConv2D(3));
     pass_seqs.push_back(transform::CombineParallelDense(3));
     pass_seqs.push_back(transform::CombineParallelBatchMatmul(3));
@@ -286,6 +295,7 @@ class RelayBuildModule : public runtime::ModuleNode {
 
     // Alter layout transformation is only applied to homogeneous execution yet.
     if (targets.size() == 1) {
+      pass_seqs.push_back(transform::InferType());
       pass_seqs.push_back(transform::AlterOpLayout());
     }
 
@@ -323,6 +333,8 @@ class RelayBuildModule : public runtime::ModuleNode {
     // inline functions. However, this should be very unlikely for accelerators
     // and vendor-provided libraries. So we don't handle for now.
     relay_module = transform::Inline()(relay_module);
+    relay_module = transform::InferType()(relay_module);
+
     CHECK(relay_module.defined());
 
     return relay_module;
@@ -335,9 +347,9 @@ class RelayBuildModule : public runtime::ModuleNode {
    */
   Target CreateDefaultTarget(int device_type) {
     std::string name = runtime::DeviceName(device_type);
-    if (name == "cpu") return Target::Create("llvm");
-    if (name == "gpu") return Target::Create("cuda");
-    return Target::Create(name);
+    if (name == "cpu") return Target("llvm");
+    if (name == "gpu") return Target("cuda");
+    return Target(name);
   }
 
   /*!
@@ -439,9 +451,9 @@ class RelayBuildModule : public runtime::ModuleNode {
       // llvm if "codegen.LLVMModuleCreate" is accessible.
       const runtime::PackedFunc* pf = runtime::Registry::Get("codegen.LLVMModuleCreate");
       if (!target_host.defined())
-        target_host = (pf != nullptr) ? target::llvm() : target::stackvm();
+        target_host = (pf != nullptr) ? Target("llvm") : Target("stackvm");
 
-      if (target_host.defined() && target_host->id->name == "llvm") {
+      if (target_host.defined() && target_host->kind->name == "llvm") {
         // If we can decide the target is LLVM, we then create an empty LLVM module.
         ret_.mod = (*pf)(target_host->str(), "empty_module");
       } else {
@@ -467,7 +479,7 @@ class RelayBuildModule : public runtime::ModuleNode {
     Target target_host = target_host_;
     if (!target_host_.defined()) {
       for (const auto& it : targets_) {
-        if (it.second->id->device_type == kDLCPU) {
+        if (it.second->kind->device_type == kDLCPU) {
           target_host = it.second;
           break;
         }

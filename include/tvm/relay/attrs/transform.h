@@ -101,6 +101,14 @@ struct ScatterAttrs : public tvm::AttrsNode<ScatterAttrs> {
   }
 };
 
+struct ScatterAddAttrs : public tvm::AttrsNode<ScatterAddAttrs> {
+  Integer axis;
+
+  TVM_DECLARE_ATTRS(ScatterAddAttrs, "relay.attrs.ScatterAddAttrs") {
+    TVM_ATTR_FIELD(axis).set_default(0).describe("The axis over which to select values.");
+  }
+};
+
 struct GatherAttrs : public tvm::AttrsNode<GatherAttrs> {
   Integer axis;
 
@@ -298,6 +306,19 @@ struct ClipAttrs : public tvm::AttrsNode<ClipAttrs> {
   }
 };
 
+/*! \brief Attributes for FixedPointMultiply operator */
+struct FixedPointMultiplyAttrs : public tvm::AttrsNode<FixedPointMultiplyAttrs> {
+  int32_t multiplier;
+  int32_t shift;
+
+  TVM_DECLARE_ATTRS(FixedPointMultiplyAttrs, "relay.attrs.FixedPointMultiplyAttrs") {
+    TVM_ATTR_FIELD(multiplier)
+        .describe("Multiplier of a fixed floating point number described as multiplier*2^(shift)");
+    TVM_ATTR_FIELD(shift).describe(
+        "Shift of a fixed floating point number described as multiplier*2^(shift)");
+  }
+};
+
 /*! \brief Attributes for LayoutTransform operator */
 struct LayoutTransformAttrs : public tvm::AttrsNode<LayoutTransformAttrs> {
   std::string src_layout;
@@ -359,6 +380,25 @@ struct OneHotAttrs : public tvm::AttrsNode<OneHotAttrs> {
     TVM_ATTR_FIELD(dtype).set_default(NullValue<DataType>()).describe("Output data type.");
   }
 };  // struct OneHotAttrs
+
+/*! \brief Attributes used in matrix_set_diag operator */
+struct MatrixSetDiagAttrs : public tvm::AttrsNode<MatrixSetDiagAttrs> {
+  int k1;
+  int k2;
+  bool super_diag_right_align;
+  bool sub_diag_right_align;
+
+  TVM_DECLARE_ATTRS(MatrixSetDiagAttrs, "relay.attrs.MatrixSetDiagAttrs") {
+    TVM_ATTR_FIELD(k1).set_default(0).describe("Lower limit (included) of the range of diagonals.");
+    TVM_ATTR_FIELD(k2).set_default(0).describe("Upper limit (included) of the range of diagonals.");
+    TVM_ATTR_FIELD(super_diag_right_align)
+        .set_default(true)
+        .describe("Bool, true iff super-diagonal is right aligned (left-padded).");
+    TVM_ATTR_FIELD(sub_diag_right_align)
+        .set_default(false)
+        .describe("Bool, true iff sub-diagonal is right aligned (left-padded).");
+  }
+};  // struct MatrixSetDiagAttrs
 
 }  // namespace relay
 }  // namespace tvm

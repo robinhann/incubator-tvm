@@ -153,9 +153,19 @@ Expr RequantizeLower(const Expr& input_tensor, const Expr& input_scale,
         static_cast<double>(input_scale_float) / static_cast<double>(output_scale_float);
     // Skip if input and output scales are same.
     if (!IsEqualScalar(input_scale, output_scale)) {
+      int32_t fixed_point_multiplier, shift;
+      std::tie(fixed_point_multiplier, shift) = GetFixedPointMultiplierShift(double_multiplier);
+
+      const bool is_upward_rounding = (param->rounding == "UPWARD");
+
+      // When using upward rounding (i.e., x.5 rounded to x+1), leverage
+      // the FixedPointMultiply operator
       scaled_int32_t =
-          FixedPointMultiply(scaled_int32_t, double_multiplier, input_shape, param->rounding);
+          (is_upward_rounding
+               ? FixedPointMultiply(scaled_int32_t, fixed_point_multiplier, shift)
+               : FixedPointMultiplyToNearest(scaled_int32_t, double_multiplier, input_shape));
     }
+
   } else {
     // This is per-channel (per=axis) quantization.
     std::vector<double> double_multipliers;
@@ -248,7 +258,11 @@ bool RequantizeRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                    const TypeReporter& reporter) {
   CHECK_EQ(types.size(), 6);
   const auto* data = types[0].as<TensorTypeNode>();
-  CHECK(data != nullptr);
+
+  if (data == nullptr) {
+    return false;
+  }
+
   const auto in_dtype = data->dtype;
   CHECK(in_dtype == DataType::Int(8) || in_dtype == DataType::UInt(8) ||
         in_dtype == DataType::Int(32))

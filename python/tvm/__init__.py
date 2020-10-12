@@ -18,6 +18,7 @@
 """TVM: Open Deep Learning Compiler Stack."""
 import multiprocessing
 import sys
+import os
 import traceback
 
 # top-level alias
@@ -51,29 +52,40 @@ from . import target
 # tvm.te
 from . import te
 
-# tvm.testing
-from . import testing
-
 # tvm.driver
 from .driver import build, lower
+
+# tvm.parser
+from . import parser
 
 # others
 from . import arith
 
+# support infra
+from . import support
+
 # Contrib initializers
 from .contrib import rocm as _rocm, nvcc as _nvcc, sdaccel as _sdaccel
+
 
 def tvm_wrap_excepthook(exception_hook):
     """Wrap given excepthook with TVM additional work."""
 
     def wrapper(exctype, value, trbk):
         """Clean subprocesses when TVM is interrupted."""
-        exception_hook(exctype, value, trbk)
-        if hasattr(multiprocessing, 'active_children'):
+        in_pytest = "PYTEST_CURRENT_TEST" in os.environ
+
+        if exctype is error.DiagnosticError and not in_pytest:
+            pass
+        else:
+            exception_hook(exctype, value, trbk)
+
+        if hasattr(multiprocessing, "active_children"):
             # pylint: disable=not-callable
             for p in multiprocessing.active_children():
                 p.terminate()
 
     return wrapper
+
 
 sys.excepthook = tvm_wrap_excepthook(sys.excepthook)

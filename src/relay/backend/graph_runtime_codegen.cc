@@ -207,7 +207,7 @@ class GraphRuntimeCodegen : public backend::MemoizedExprTranslator<std::vector<G
 
     for (auto& kv : lowered_funcs_) {
       if (ret.lowered_funcs.count(kv.first) == 0) {
-        ret.lowered_funcs.Set(kv.first, IRModule());
+        ret.lowered_funcs.Set(kv.first, IRModule(Map<GlobalVar, BaseFunc>({})));
       }
       auto& mod = ret.lowered_funcs[kv.first];
       mod->Update(kv.second);
@@ -364,7 +364,7 @@ class GraphRuntimeCodegen : public backend::MemoizedExprTranslator<std::vector<G
     Target target;
     // Handle external function
     if (func->GetAttr<String>(attr::kCompiler).defined()) {
-      target = tvm::target::ext_dev();
+      target = Target("ext_dev");
       CCacheKey key = (*pf0)(func, target);
       CachedFunc ext_func = (*pf1)(compile_engine_, key);
       CHECK(ext_func.defined()) << "External function is not defined.";
@@ -403,7 +403,7 @@ class GraphRuntimeCodegen : public backend::MemoizedExprTranslator<std::vector<G
     CCacheKey key = (*pf0)(func, target);
     CachedFunc lowered_func = (*pf1)(compile_engine_, key);
     if (!lowered_funcs_.count(target->str())) {
-      lowered_funcs_[target->str()] = IRModule();
+      lowered_funcs_[target->str()] = IRModule(Map<GlobalVar, BaseFunc>({}));
     }
     lowered_funcs_[target->str()]->Update(lowered_func->funcs);
     return GraphAddCallNode(op, _GetUniqueName(lowered_func->func_name), lowered_func->func_name);
@@ -642,7 +642,6 @@ struct Handler<std::shared_ptr<tvm::relay::backend::GraphNode>> {
     LOG(FATAL) << "Not implemented.";
   }
 };
-
 template <>
 struct Handler<std::unordered_map<std::string, dmlc::any>> {
   inline static void Write(dmlc::JSONWriter* writer,
@@ -661,6 +660,8 @@ struct Handler<std::unordered_map<std::string, dmlc::any>> {
         writer->WriteObjectKeyValue(k, dmlc::get<std::vector<std::vector<int64_t>>>(v));
       } else if (SameType<std::vector<std::string>>(v)) {
         writer->WriteObjectKeyValue(k, dmlc::get<std::vector<std::string>>(v));
+      } else if (SameType<std::vector<dmlc::any>>(v)) {
+        writer->WriteObjectKeyValue(k, dmlc::get<std::vector<dmlc::any>>(v));
       } else {
         LOG(FATAL) << "Not supported";
       }

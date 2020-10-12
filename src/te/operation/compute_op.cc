@@ -46,7 +46,9 @@ using namespace tir;
 TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
     .set_dispatch<ComputeOpNode>([](const ObjectRef& node, ReprPrinter* p) {
       auto* op = static_cast<const ComputeOpNode*>(node.get());
-      p->stream << "compute(" << op->name << ", " << op << ")";
+      p->stream << "compute(" << op->name << ", body=" << op->body << ", axis=" << op->axis
+                << ", reduce_axis=" << op->reduce_axis << ", tag=" << op->tag
+                << ", attrs=" << op->attrs << ")";
     });
 
 TVM_REGISTER_NODE_TYPE(ComputeOpNode);
@@ -56,7 +58,8 @@ static void VerifyComputeOp(const ComputeOpNode* op);
 
 inline bool ReduceEqual(const tir::ReduceNode* a, const tir::ReduceNode* b) {
   return (a->combiner.same_as(b->combiner)) && (a->source.same_as(b->source)) &&
-         (a->axis.same_as(b->axis)) && (a->condition.same_as(b->condition));
+         (a->axis.same_as(b->axis)) && (a->condition.same_as(b->condition)) &&
+         ((a->init.empty() && b->init.empty()) || (a->init.same_as(b->init)));
 }
 
 int ComputeOpNode::num_outputs() const { return body.size(); }
@@ -88,7 +91,6 @@ Array<PrimExpr> BaseComputeOpNode::output_shape(size_t idx) const {
 
 Tensor compute(Array<PrimExpr> shape, FCompute fcompute, std::string name, std::string tag,
                Map<String, ObjectRef> attrs) {
-  auto op_node = make_object<ComputeOpNode>();
   // compute dimension.
   size_t ndim = shape.size();
   std::vector<IterVar> axis;
@@ -105,7 +107,6 @@ Tensor compute(Array<PrimExpr> shape, FCompute fcompute, std::string name, std::
 
 Array<Tensor> compute(Array<PrimExpr> shape, FBatchCompute fcompute, std::string name,
                       std::string tag, Map<String, ObjectRef> attrs) {
-  auto op_node = make_object<ComputeOpNode>();
   // compute dimension.
   size_t ndim = shape.size();
   std::vector<IterVar> axis;
@@ -309,6 +310,13 @@ void MakeReduction(const ComputeOpNode* op, const Array<Tensor>& tensors, Stmt* 
   }
   Array<PrimExpr> init_value = combiner->identity_element;
   Array<PrimExpr> update_value = (*combiner)(lhs, reduce->source);
+
+  // If an init was passed to ReduceNode, use that for initialization
+  // instead of combiner->identity_element
+  Array<PrimExpr> reduce_init = reduce->init;
+  if (!reduce_init.empty()) {
+    init_value = reduce_init;
+  }
   for (size_t i = 0; i < size; ++i) {
     Tensor t = tensors[i];
     inits.emplace_back(ProducerStore(t, init_value[i], args));

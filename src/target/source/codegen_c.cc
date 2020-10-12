@@ -617,9 +617,13 @@ void CodeGenC::VisitExpr_(const CallNode* op, std::ostream& os) {  // NOLINT(*)
       CHECK(op->args.size() == 1 && l);
       os << "((";
       this->PrintType(l->dtype.element_of(), os);
-      os << " *)" << this->GetVarID(l->buffer_var.get()) << " + ";
+      os << " *)" << this->GetVarID(l->buffer_var.get()) << " + "
+         << "(";
       this->PrintExpr(l->index, os);
-      os << ')';
+      if (l->dtype.bits() == 4 || (l->dtype.bits() == 1 && l->dtype.is_int())) {
+        os << " / " << (32 / l->dtype.bits());
+      }
+      os << "))";
     } else if (op->op.same_as(builtin::tvm_struct_get())) {
       CHECK_EQ(op->args.size(), 3U);
       os << GetStructRef(op->dtype, op->args[0], op->args[1], op->args[2].as<IntImmNode>()->value);
@@ -629,12 +633,12 @@ void CodeGenC::VisitExpr_(const CallNode* op, std::ostream& os) {  // NOLINT(*)
       this->PrintExpr(op->args[0], os);
       os << " == NULL)";
     } else if (op->op.same_as(builtin::reinterpret())) {
-      // generate (*( TYPE *)(&(ARG)))
+      int ssa_scope = BeginScope();
+      std::string rhs = SSAGetID(PrintExpr(op->args[0]), op->args[0]->dtype);
       os << "(*(";
       this->PrintType(op->dtype, os);
-      os << " *)(&(";
-      this->PrintExpr(op->args[0], os);
-      os << ")))";
+      os << " *)(&(" << rhs << ")))";
+      EndScope(ssa_scope);
     } else if (op->op.same_as(builtin::isnan())) {
       os << "(";
       this->PrintExpr(op->args[0], os);
@@ -720,14 +724,15 @@ void CodeGenC::VisitStmt_(const StoreNode* op) {
   } else {
     CHECK(is_one(op->predicate)) << "Predicated store is not supported";
     arith::PVar<PrimExpr> base;
+
+    // The assignment below introduces side-effect, and the resulting value cannot
+    // be reused across multiple expression, thus a new scope is needed
+    int vec_scope = BeginScope();
+
     if (arith::ramp(base, 1, t.lanes()).Match(op->index)) {
       std::string value = this->PrintExpr(op->value);
       this->PrintVecStore(op->buffer_var.get(), t, base.Eval(), value);
     } else {
-      // The assignment below introduces side-effect, and the resulting value cannot
-      // be reused across multiple expression, thus a new scope is needed
-      int vec_scope = BeginScope();
-
       // store elements seperately
       std::string index = SSAGetID(PrintExpr(op->index), op->index.dtype());
       std::string value = SSAGetID(PrintExpr(op->value), op->value.dtype());
@@ -754,14 +759,20 @@ void CodeGenC::VisitStmt_(const StoreNode* op) {
         PrintVecElemLoad(value, op->value.dtype(), i, stream);
         stream << ";\n";
       }
-      EndScope(vec_scope);
     }
+    EndScope(vec_scope);
   }
 }
 
 void CodeGenC::VisitExpr_(const LetNode* op, std::ostream& os) {  // NOLINT(*)
+  auto it = let_binding_.find(op->var);
+  if (it != let_binding_.end()) {
+    CHECK(deep_equal_(it->second->value, op->value))
+        << "Let cannot bind the same var to two different values";
+  } else {
+    let_binding_[op->var] = op;
+  }
   std::string value = PrintExpr(op->value);
-  CHECK(!var_idmap_.count(op->var.get()));
   var_idmap_[op->var.get()] = value;
   os << PrintExpr(op->body);
 }
