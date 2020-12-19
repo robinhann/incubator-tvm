@@ -17,7 +17,7 @@
 """Binary Neural Network (BNN) Operators"""
 # pylint: disable=invalid-name
 from tvm import te
-from ..util import get_const_tuple
+from ..utils import get_const_tuple
 
 
 def batch_matmul(x, y, oshape=None):
@@ -51,7 +51,7 @@ def batch_matmul(x, y, oshape=None):
     if oshape is None:
         assert XB == YB or XB == 1 or YB == 1, "batch dimension doesn't match"
         assert x_shape[2] == y_shape[2], "shapes of x and y is inconsistant"
-        batch = max(XB, YB)
+        batch = te.max(XB, YB)
         N = y.shape[1]
         oshape = (batch, M, N)
     return te.compute(
